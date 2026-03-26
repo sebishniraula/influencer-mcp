@@ -4,6 +4,8 @@ A full-stack AI application built with the [Jac language](https://www.jac-lang.o
 
 The influencer is named **Aria**: a sustainable fashion advocate with a warm, authentic voice targeting Gen Z and millennials.
 
+> **This project was built as an MCP (Model Context Protocol) exploration** — the core idea is exposing Aria's capabilities as a set of HTTP tools that any MCP-compatible client (Claude Desktop, a Slack bot, a Discord bot, etc.) can call directly, without needing the web UI at all.
+
 ---
 
 ## What it does
@@ -18,6 +20,81 @@ The influencer is named **Aria**: a sustainable fashion advocate with a warm, au
 
 ---
 
+## MCP Server
+
+`mcp_server.jac` exposes Aria's capabilities as plain HTTP endpoints — no web UI required. Any tool that can make a POST request can use Aria: Claude Desktop, a Slack bot, a cron job, a CI pipeline, whatever.
+
+### Public endpoints (no auth needed)
+
+These are read-only and work without a login token:
+
+| Endpoint | Body | What it does |
+|---|---|---|
+| `POST /walker/mcp_chat` | `{"message": "..."}` | Chat with Aria — returns a response in her voice |
+| `POST /walker/mcp_generate` | `{"platform": "instagram", "count": 3}` | Generate post drafts (preview, not persisted) |
+| `POST /walker/mcp_get_context` | `{}` | Get current persona, brand guide, active direction |
+| `POST /walker/mcp_analytics` | `{}` | Draft counts, message count, active direction |
+
+### Authenticated endpoints (require Bearer token)
+
+These write to the graph so they need a user session:
+
+| Endpoint | Body | What it does |
+|---|---|---|
+| `POST /walker/mcp_set_direction` | `{"instruction": "Focus on sustainable denim, edgy Gen Z tone"}` | Update Aria's active content direction |
+| `POST /walker/mcp_get_drafts` | `{}` | Fetch all pending drafts for the logged-in user |
+
+### Quick start with curl
+
+```bash
+# Start the MCP server
+OPENAI_API_KEY=your-key python -m jaclang start mcp_server.jac --port 8080
+
+# Chat with Aria (no auth required)
+curl -X POST http://localhost:8080/walker/mcp_chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hey Aria, what are you working on this week?"}'
+
+# Generate Instagram drafts
+curl -X POST http://localhost:8080/walker/mcp_generate \
+  -H "Content-Type: application/json" \
+  -d '{"platform": "instagram", "count": 3}'
+
+# Get Aria's current context
+curl -X POST http://localhost:8080/walker/mcp_get_context \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+### Authenticated usage
+
+```bash
+# 1. Register a user
+curl -X POST http://localhost:8080/user/register \
+  -H "Content-Type: application/json" \
+  -d '{"email": "you@example.com", "password": "yourpassword", "username": "you"}'
+
+# 2. Log in to get a token
+TOKEN=$(curl -s -X POST http://localhost:8080/user/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "you@example.com", "password": "yourpassword"}' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['token'])")
+
+# 3. Set Aria's content direction
+curl -X POST http://localhost:8080/walker/mcp_set_direction \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"instruction": "Focus on sustainable denim this week, edgy Gen Z tone"}'
+```
+
+### Design note: stateless vs stateful
+
+The public MCP tools are intentionally **stateless** — `mcp_chat` generates a response from the current graph context but doesn't save conversation history. The MCP client is expected to manage conversation context externally (just like Claude Desktop does). This is what makes them safe to expose without authentication.
+
+The authenticated tools (set direction, get drafts) write to the user's personal graph, so they require a login token to keep each user's Aria instance isolated.
+
+---
+
 ## Architecture
 
 Built with **Jac** — a language that compiles to Python on the backend and React on the frontend from a single source file.
@@ -25,10 +102,14 @@ Built with **Jac** — a language that compiles to Python on the backend and Rea
 ```
 main.jac         ← React frontend (cl{} blocks) + entry point
 influencer.jac   ← Backend: graph nodes, walkers, LLM-powered logic
-mcp_server.jac   ← MCP (Model Context Protocol) server integration
+mcp_server.jac   ← MCP tool server (HTTP endpoints for external clients)
 tests.jac        ← 11 unit/integration tests
 jac.toml         ← Project config (deps, port, LLM model)
 ```
+
+The project has **two ways to interact with Aria**:
+1. **Web UI** (`main.jac`) — the full browser app with chat, drafts panel, auth
+2. **MCP server** (`mcp_server.jac`) — raw HTTP tools, call from anything
 
 ### Graph layout
 
@@ -164,8 +245,7 @@ influencer-mcp/
 ├── mcp_server.jac    # MCP server for external tool integration
 ├── tests.jac         # Test suite (jac test tests.jac)
 ├── jac.toml          # Project config
-├── .env.example      # Environment variable template
-└── CLAUDE.md         # AI assistant context (Jac docs references)
+└── .env.example      # Environment variable template
 ```
 
 ---
@@ -174,6 +254,7 @@ influencer-mcp/
 
 - **[Jac](https://www.jac-lang.org/)** — Object-Spatial Programming language (Python backend + React frontend from one file)
 - **[jaclang byllm](https://docs.jaseci.org/learn/jac-byllm/quickstart/)** — `by llm()` decorator for LLM-backed functions
+- **MCP (Model Context Protocol)** — HTTP tool endpoints consumable by Claude Desktop, bots, and other AI clients
 - **OpenAI GPT-4o** — Default LLM
 - **React** — Auto-compiled from `cl{}` blocks in Jac
 - **Bun** — Frontend bundler
