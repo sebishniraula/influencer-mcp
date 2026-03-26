@@ -1,0 +1,22 @@
+[project]
+name = "ai-influencer"
+entry-point = "main.jac"
+
+[dependencies]
+python-dotenv = ">=1.0.0"
+
+[dependencies.npm]
+jac-client-node = "1.0.7"
+
+[dependencies.npm.dev]
+"@jac-client/dev-deps" = "2.0.0"
+
+[serve]
+base_route_app = "app"
+port = 8000
+
+[plugins.client]
+port = 5173
+
+[plugins.byllm.model]
+default_model = "gpt-4o"
