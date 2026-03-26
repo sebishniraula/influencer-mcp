@@ -8,3 +8,8 @@ node_modules/
 *.db
 *.sqlite
 jaseci-llmdocs/
+jac-reference.html
+CLAUDE.md
+TODOS.md
+jaseci-llmdocs/
+.claude/
